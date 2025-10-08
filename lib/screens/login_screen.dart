@@ -19,10 +19,22 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> handleAuth() async {
     try {
       if (isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: emailController.text.trim(),
           password: passwordController.text.trim(),
         );
+        
+        // Verifică dacă documentul utilizatorului există
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
+        
+        if (!userDoc.exists) {
+          // Creează un document implicit pentru utilizator dacă nu există
+          await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+            'email': emailController.text.trim(),
+            'role': 'staff', // rol implicit
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+        }
       } else {
         // Doar familie/apartinator poate crea cont
         final code = codeController.text.trim();

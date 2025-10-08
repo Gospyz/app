@@ -1,29 +1,31 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
-import 'screens/services_screen.dart';
-import 'screens/gallery_screen.dart';
-import 'screens/contact_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
+import 'screens/login_screen.dart';
 
-void main() {
-  runApp(GoldEventsApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  // Setează persistența locală doar pentru web
+  if (const bool.fromEnvironment('dart.library.html')) {
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+  }
+  runApp(ResidentApp());
 }
 
-class GoldEventsApp extends StatelessWidget {
+class ResidentApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gold Events',
+      title: 'Centru Rezidențial',
       theme: ThemeData(
-        primarySwatch: Colors.amber,
-        fontFamily: 'Roboto',
+        primarySwatch: Colors.teal,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => HomeScreen(),
-        '/services': (context) => ServicesScreen(),
-        '/gallery': (context) => GalleryScreen(),
-        '/contact': (context) => ContactScreen(),
-      },
+      home: LoginScreen(),
     );
   }
 }

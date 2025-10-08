@@ -19,10 +19,30 @@ class DashboardScreen extends StatelessWidget {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<Map<String, dynamic>?> getCurrentUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    return doc.data();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return null;
+      }
+      
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      
+      if (!doc.exists) {
+        // Creează un document implicit pentru utilizator dacă nu există
+        final defaultData = {
+          'email': user.email,
+          'role': 'staff',
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        await _firestore.collection('users').doc(user.uid).set(defaultData);
+        return defaultData;
+      }
+      
+      return doc.data();
+    } catch (e) {
+      print('Error getting user data: $e');
+      return null;
+    }
   }
 
   void logout(BuildContext context) async {

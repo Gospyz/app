@@ -167,7 +167,7 @@ final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
                   });
                   Navigator.pop(context);
                   setState(() {});
-                  if (selectedRole == UserRole.family || userRoleToString(selectedRole) == 'Aparținător') {
+                  if (userRoleToString(selectedRole) == 'Aparținător') {
                     _showFamilyDataDialog(cred.user!.uid);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -181,6 +181,13 @@ final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
                 }
               }
             },
+            child: Text('Salvează'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showFamilyDataDialog(String userId) {
     final _formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
@@ -242,12 +249,6 @@ final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
                 );
               }
             },
-            child: Text('Salvează'),
-          ),
-        ],
-      ),
-    );
-  }
             child: Text('Salvează'),
           ),
         ],
