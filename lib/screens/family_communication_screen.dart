@@ -5,6 +5,56 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'app_drawer.dart';
 
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'app_drawer.dart';
+
+  Future<void> _sendActivityNotification({
+    required String residentId,
+    required String residentName,
+    required String message,
+    String? imageUrl,
+  }) async {
+    try {
+      // Găsim aparținătorii care au activat notificările pentru activități
+      final QuerySnapshot familyMembers = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'family')
+          .where('patientId', isEqualTo: residentId)
+          .get();
+
+      for (var doc in familyMembers.docs) {
+        // Verificăm preferințele de notificări ale aparținătorului
+        final prefs = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(doc.id)
+            .collection('notification_preferences')
+            .doc('settings')
+            .get();
+
+        if (prefs.exists && prefs.data()?['activities'] == true) {
+          // Construim mesajul notificării
+          final notifMsg = message + (imageUrl != null ? '\n[Imagine atașată]' : '');
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'userId': doc.id,
+            'title': 'Actualizare activitate pentru $residentName',
+            'message': notifMsg,
+            'timestamp': FieldValue.serverTimestamp(),
+            'read': false,
+            'type': 'activity',
+            'residentId': residentId,
+            'imageUrl': imageUrl,
+          });
+        }
+      }
+    } catch (e) {
+      print('Eroare la trimiterea notificărilor de activitate: $e');
+    }
+  }
+
 class FamilyCommunicationScreen extends StatefulWidget {
   final String? residentId;
   const FamilyCommunicationScreen({Key? key, this.residentId}) : super(key: key);
@@ -69,6 +119,17 @@ class _FamilyCommunicationScreenState extends State<FamilyCommunicationScreen> {
       'imageUrl': imageUrl,
       if (fromRole == 'family') 'seenByStaff': false,
     });
+
+    // Trimitem notificare de activitate către aparținători dacă mesajul e de la personal
+    if (fromRole == 'personal') {
+      await _sendActivityNotification(
+        residentId: selectedResidentId!,
+        residentName: selectedResidentName ?? '',
+        message: messageController.text.trim(),
+        imageUrl: imageUrl,
+      );
+    }
+
     messageController.clear();
     setState(() {
       _imageFile = null;

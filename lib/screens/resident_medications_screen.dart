@@ -19,6 +19,70 @@ class ResidentMedicationsScreen extends StatefulWidget {
 class _ResidentMedicationsScreenState extends State<ResidentMedicationsScreen> {
   bool get isFamily => widget.residentId.startsWith('family_');
 
+  Future<void> _sendMedicationNotification({
+    required String residentId,
+    required String residentName,
+    required String medicationName,
+    required String dose,
+    required String schedule,
+    String? notes,
+    bool isUpdate = false,
+    bool isDelete = false,
+  }) async {
+    try {
+      // Găsim aparținătorii care au activat notificările pentru medicamente
+      final QuerySnapshot familyMembers = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'family')
+          .where('patientId', isEqualTo: residentId)
+          .get();
+
+      for (var doc in familyMembers.docs) {
+        // Verificăm preferințele de notificări ale aparținătorului
+        final prefs = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(doc.id)
+            .collection('notification_preferences')
+            .doc('settings')
+            .get();
+
+        if (prefs.exists && prefs.data()?['medications'] == true) {
+          // Construim mesajul notificării
+          String title;
+          String message;
+          
+          if (isDelete) {
+            title = 'Medicament șters';
+            message = 'Medicamentul ${medicationName} a fost șters din schema de tratament pentru ${residentName}.';
+          } else {
+            final action = isUpdate ? "actualizat" : "adăugat";
+            title = 'Medicament ${action}';
+            message = 'Medicament ${action} pentru ${residentName}:\n'
+                'Nume: ${medicationName}\n'
+                'Doză: ${dose}\n'
+                'Orar: ${schedule}' +
+                (notes?.isNotEmpty == true ? '\nObservații: ${notes}' : '');
+          }
+
+          // Adăugăm notificarea în Firestore
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'userId': doc.id,
+            'title': title,
+            'message': message,
+            'timestamp': FieldValue.serverTimestamp(),
+            'read': false,
+            'type': 'medication',
+            'residentId': residentId,
+            'medicationName': medicationName,
+            'schedule': schedule
+          });
+        }
+      }
+    } catch (e) {
+      print('Eroare la trimiterea notificărilor: $e');
+    }
+  }
+
   void _showAddMedicationDialog() {
     final _formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
@@ -138,16 +202,30 @@ class _ResidentMedicationsScreenState extends State<ResidentMedicationsScreen> {
           ElevatedButton(
             onPressed: () async {
               if (_formKey.currentState!.validate()) {
+                // Actualizăm medicamentul în Firestore
                 await FirebaseFirestore.instance.collection('medications').doc(docId).update({
                   'name': nameController.text.trim(),
                   'dose': doseController.text.trim(),
                   'schedule': scheduleController.text.trim(),
                   'notes': notesController.text.trim(),
+                  'updatedAt': FieldValue.serverTimestamp(),
                 });
+
+                // Trimitem notificări către aparținători despre actualizare
+                await _sendMedicationNotification(
+                  residentId: widget.residentId,
+                  residentName: widget.residentName,
+                  medicationName: nameController.text.trim(),
+                  dose: doseController.text.trim(),
+                  schedule: scheduleController.text.trim(),
+                  notes: notesController.text.trim(),
+                  isUpdate: true,
+                );
+
                 Navigator.pop(context);
                 setState(() {});
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Medicament actualizat!')),
+                  SnackBar(content: Text('Medicament actualizat și notificări trimise!')),
                 );
               }
             },
@@ -159,10 +237,27 @@ class _ResidentMedicationsScreenState extends State<ResidentMedicationsScreen> {
   }
 
   Future<void> _deleteMedication(String docId) async {
+    // Obținem datele medicamentului înainte de ștergere
+    final medicationDoc = await FirebaseFirestore.instance.collection('medications').doc(docId).get();
+    final medicationData = medicationDoc.data() as Map<String, dynamic>;
+
+    // Ștergem medicamentul
     await FirebaseFirestore.instance.collection('medications').doc(docId).delete();
+
+    // Trimitem notificări către aparținători despre ștergere
+    await _sendMedicationNotification(
+      residentId: widget.residentId,
+      residentName: widget.residentName,
+      medicationName: medicationData['name'] ?? '',
+      dose: medicationData['dose'] ?? '',
+      schedule: medicationData['schedule'] ?? '',
+      notes: medicationData['notes'],
+      isDelete: true,
+    );
+
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Medicament șters!')),
+      SnackBar(content: Text('Medicament șters și notificări trimise!')),
     );
   }
 

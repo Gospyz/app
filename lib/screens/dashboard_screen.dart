@@ -224,6 +224,63 @@ class DashboardScreen extends StatelessWidget {
                     );
                   },
                 ),
+                  // INDICATORI STARE REZIDENȚI
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('residents').snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+                      final docs = snapshot.data!.docs;
+                      int okCount = 0, warningCount = 0, criticalCount = 0;
+                      for (var doc in docs) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final status = data['healthStatus'] ?? 'ok';
+                        if (status == 'ok') okCount++;
+                        else if (status == 'warning') warningCount++;
+                        else if (status == 'critical') criticalCount++;
+                      }
+                      return Card(
+                        color: Colors.yellow[50],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        elevation: 4,
+                        margin: EdgeInsets.only(bottom: 18),
+                        child: ListTile(
+                          leading: Icon(Icons.health_and_safety, color: Colors.orange[800], size: 32),
+                          title: Text("Starea rezidenților", style: TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text("Verde: $okCount  |  Galben: $warningCount  |  Roșu: $criticalCount"),
+                        ),
+                      );
+                    },
+                  ),
+                  // FEEDBACK APARȚINĂTORI
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('feedback').snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return SizedBox.shrink();
+                      final docs = snapshot.data!.docs;
+                      if (docs.isEmpty) return Card(
+                        color: Colors.grey[100],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        elevation: 2,
+                        margin: EdgeInsets.only(bottom: 18),
+                        child: ListTile(
+                          leading: Icon(Icons.feedback, color: Colors.grey),
+                          title: Text("Feedback aparținători"),
+                          subtitle: Text("Nu există feedback nou."),
+                        ),
+                      );
+                      return Card(
+                        color: Colors.purple[50],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        elevation: 4,
+                        margin: EdgeInsets.only(bottom: 18),
+                        child: ListTile(
+                          leading: Icon(Icons.feedback, color: Colors.purple[800]),
+                          title: Text("Feedback aparținători", style: TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text("Ultimul: " + (docs.last.data() as Map<String, dynamic>)['text'] ?? ''),
+                        ),
+                      );
+                    },
+                  ),
                 // ALERTE TRATAMENTE/MEDICAMENTE
                 Text("Alerte tratamente și medicamente", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal[900])),
                 StreamBuilder<QuerySnapshot>(

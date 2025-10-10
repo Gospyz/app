@@ -15,6 +15,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
   final titleController = TextEditingController();
   final timeController = TextEditingController();
   final locationController = TextEditingController();
+  List<String> selectedResidents = [];
+  List<Map<String, dynamic>> allResidents = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchResidents();
+  }
+
+  Future<void> fetchResidents() async {
+    final snapshot = await FirebaseFirestore.instance.collection('residents').where('status', isNotEqualTo: 'externat').get();
+    setState(() {
+      allResidents = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {'id': doc.id, 'name': data['name'] ?? ''};
+      }).toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +120,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             prefixIcon: Icon(Icons.location_on),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
+                        ),
+                        SizedBox(height: 10),
+                        // Selectare rezidenți participanți
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text("Rezidenți participanți:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          children: allResidents.map((resident) {
+                            final isSelected = selectedResidents.contains(resident['id']);
+                            return FilterChip(
+                              label: Text(resident['name']),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    selectedResidents.add(resident['id']);
+                                  } else {
+                                    selectedResidents.remove(resident['id']);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
                         ),
                         SizedBox(height: 14),
                         ElevatedButton.icon(
@@ -200,6 +244,40 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void addActivity() {
-    // Implementați logica pentru a adăuga o activitate
+    if (titleController.text.trim().isEmpty || timeController.text.trim().isEmpty || selectedResidents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Completează toate câmpurile și selectează cel puțin un rezident!')),
+      );
+      return;
+    }
+    final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+    final activityData = {
+      'title': titleController.text.trim(),
+      'time': timeController.text.trim(),
+      'location': locationController.text.trim(),
+      'date': formattedDate,
+      'participants': selectedResidents,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    FirebaseFirestore.instance.collection('activities').add(activityData);
+    // Salvează participarea în fișa fiecărui rezident
+    for (final residentId in selectedResidents) {
+      FirebaseFirestore.instance.collection('residents').doc(residentId).collection('activity_log').add({
+        'activityTitle': titleController.text.trim(),
+        'date': formattedDate,
+        'time': timeController.text.trim(),
+        'location': locationController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    titleController.clear();
+    timeController.clear();
+    locationController.clear();
+    setState(() {
+      selectedResidents.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Activitate adăugată și participarea salvată!')),
+    );
   }
 }

@@ -12,6 +12,60 @@ class AppointmentsScreen extends StatefulWidget {
 }
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
+  Future<void> _sendAppointmentNotification({
+    required String residentId,
+    required String residentName,
+    required String appointmentType,
+    required String date,
+    required String time,
+    String? notes,
+    bool isUpdate = false,
+  }) async {
+    try {
+      // Găsim aparținătorii care au activat notificările pentru programări medicale
+      final QuerySnapshot familyMembers = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'family')
+          .where('patientId', isEqualTo: residentId)
+          .get();
+
+      for (var doc in familyMembers.docs) {
+        // Verificăm preferințele de notificări ale aparținătorului
+        final prefs = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(doc.id)
+            .collection('notification_preferences')
+            .doc('settings')
+            .get();
+
+        if (prefs.exists && prefs.data()?['medicalAppointments'] == true) {
+          // Construim mesajul notificării
+          final action = isUpdate ? "actualizată" : "adăugată";
+          final message = 'Programare ${action} pentru ${residentName}:\n'
+              'Tip: ${appointmentType}\n'
+              'Data: ${date}\n'
+              'Ora: ${time}' +
+              (notes?.isNotEmpty == true ? '\nObservații: ${notes}' : '');
+
+          // Adăugăm notificarea în Firestore
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'userId': doc.id,
+            'title': 'Programare medicală ${action}',
+            'message': message,
+            'timestamp': FieldValue.serverTimestamp(),
+            'read': false,
+            'type': 'medical_appointment',
+            'residentId': residentId,
+            'appointmentDate': date,
+            'appointmentTime': time
+          });
+        }
+      }
+    } catch (e) {
+      print('Eroare la trimiterea notificărilor: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isFamily = widget.residentId != null;
@@ -217,6 +271,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ElevatedButton(
             onPressed: () async {
               if (_formKey.currentState!.validate()) {
+                // Adăugăm programarea în Firestore
                 await FirebaseFirestore.instance.collection('appointments').add({
                   'residentId': selectedResidentId,
                   'residentName': selectedResidentName,
@@ -224,10 +279,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                   'time': timeController.text,
                   'type': typeController.text,
                   'notes': notesController.text,
+                  'createdAt': FieldValue.serverTimestamp(),
                 });
+
+                // Trimitem notificări către aparținători
+                await _sendAppointmentNotification(
+                  residentId: selectedResidentId!,
+                  residentName: selectedResidentName!,
+                  appointmentType: typeController.text,
+                  date: dateController.text,
+                  time: timeController.text,
+                  notes: notesController.text,
+                );
+
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Programare adăugată!')),
+                  SnackBar(content: Text('Programare adăugată și notificări trimise!')),
                 );
               }
             },
@@ -296,15 +363,29 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ElevatedButton(
             onPressed: () async {
               if (_formKey.currentState!.validate()) {
+                // Actualizăm programarea în Firestore
                 await FirebaseFirestore.instance.collection('appointments').doc(docId).update({
                   'date': dateController.text,
                   'time': timeController.text,
                   'type': typeController.text,
                   'notes': notesController.text,
+                  'updatedAt': FieldValue.serverTimestamp(),
                 });
+
+                // Trimitem notificări către aparținători despre actualizare
+                await _sendAppointmentNotification(
+                  residentId: data['residentId'],
+                  residentName: data['residentName'],
+                  appointmentType: typeController.text,
+                  date: dateController.text,
+                  time: timeController.text,
+                  notes: notesController.text,
+                  isUpdate: true,
+                );
+
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Programare actualizată!')),
+                  SnackBar(content: Text('Programare actualizată și notificări trimise!')),
                 );
               }
             },

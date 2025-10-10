@@ -14,6 +14,22 @@ class UserSettingsScreen extends StatefulWidget {
 }
 
 class _UserSettingsScreenState extends State<UserSettingsScreen> {
+  // Controllers and variables for mass messaging
+  final TextEditingController _massMsgSubjectCtrl = TextEditingController();
+  final TextEditingController _massMsgBodyCtrl = TextEditingController();
+  bool _massMsgEmail = true;
+  bool _massMsgPush = false;
+  bool _massMsgSms = false;
+
+  // Controllers and variables for announcements
+  final TextEditingController _announcementTitleCtrl = TextEditingController();
+  final TextEditingController _announcementBodyCtrl = TextEditingController();
+  bool _announcementHomepage = false;
+
+  // Controllers and variables for auto notifications
+  final TextEditingController _autoNotifTitleCtrl = TextEditingController();
+  final TextEditingController _autoNotifBodyCtrl = TextEditingController();
+  DateTime? _autoNotifDate;
 final SettingsService _settingsService = SettingsService();
 final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
 
@@ -26,26 +42,65 @@ final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
   bool _notifSms = false;
   bool _darkMode = false;
   String _language = 'RO';
+  
+  // Preferințe notificări aparținători
+  bool _notifyMedicalAppointments = true;
+  bool _notifyMedications = true;
+  bool _notifyActivities = true;
+  bool _notifyDailyUpdates = true;
+  bool _notifyWeeklyUpdates = false;
 
-  // Controlere pentru mesaje în masă și anunțuri
-  final TextEditingController _massMsgSubjectCtrl = TextEditingController();
-  final TextEditingController _massMsgBodyCtrl = TextEditingController();
-  bool _massMsgEmail = true;
-  bool _massMsgPush = true;
-  bool _massMsgSms = false;
-
-  final TextEditingController _announcementTitleCtrl = TextEditingController();
-  final TextEditingController _announcementBodyCtrl = TextEditingController();
-  bool _announcementHomepage = false;
-
-  final TextEditingController _autoNotifTitleCtrl = TextEditingController();
-  final TextEditingController _autoNotifBodyCtrl = TextEditingController();
-  DateTime? _autoNotifDate;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadNotificationPreferences();
+  }
+
+  Future<void> _loadNotificationPreferences() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notification_preferences')
+          .doc('settings')
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _notifyMedicalAppointments = data['medicalAppointments'] ?? true;
+          _notifyMedications = data['medications'] ?? true;
+          _notifyActivities = data['activities'] ?? true;
+          _notifyDailyUpdates = data['dailyUpdates'] ?? true;
+          _notifyWeeklyUpdates = data['weeklyUpdates'] ?? false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveNotificationPreferences() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('notification_preferences')
+          .doc('settings')
+          .set({
+        'medicalAppointments': _notifyMedicalAppointments,
+        'medications': _notifyMedications,
+        'activities': _notifyActivities,
+        'dailyUpdates': _notifyDailyUpdates,
+        'weeklyUpdates': _notifyWeeklyUpdates,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Preferințele au fost salvate!')),
+      );
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -436,444 +491,435 @@ final FirestoreSettingsService _firestoreSettings = FirestoreSettingsService();
   @override
   Widget build(BuildContext context) {
     final isFamily = FirebaseAuth.instance.currentUser?.email?.contains('family.com') ?? false;
-    return Scaffold(
-      drawer: AppDrawer(currentRoute: 'settings'),
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Icon(Icons.settings, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Setări și utilizatori'),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        drawer: AppDrawer(currentRoute: 'settings'),
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Icon(Icons.settings, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Setări și utilizatori'),
+            ],
+          ),
+          backgroundColor: Colors.teal,
+          bottom: TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.settings), text: 'Setări'),
+              Tab(icon: Icon(Icons.people), text: 'Utilizatori'),
+            ],
+          ),
+          actions: [
+            if (!isFamily)
+              IconButton(
+                icon: Icon(Icons.person_add),
+                tooltip: 'Adaugă utilizator',
+                onPressed: _showAddUserDialog,
+              ),
           ],
         ),
-        backgroundColor: Colors.teal,
-        actions: [
-          if (!isFamily)
-            IconButton(
-              icon: Icon(Icons.person_add),
-              tooltip: 'Adaugă utilizator',
-              onPressed: _showAddUserDialog,
-            ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
+        body: TabBarView(
           children: [
-            // SECȚIUNI NOI
-            Card(
-              color: Colors.teal[100],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.location_city, color: Colors.teal[800]),
-                title: Text('Informații despre locație', style: TextStyle(fontWeight: FontWeight.bold)),
+            // Tab 1: Setări generale
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ListView(
                 children: [
-                  ListTile(
-                    title: Text('Numele complexului / clădirii'),
-                    subtitle: Text(_locationName.isEmpty ? 'Nesetat' : _locationName),
-                    trailing: Icon(Icons.edit),
-                    onTap: _editLocationDialog,
-                  ),
-                  ListTile(
-                    title: Text('Adresă completă'),
-                    subtitle: Text(_locationAddress.isEmpty ? 'Nesetat' : _locationAddress),
-                    trailing: Icon(Icons.edit),
-                    onTap: _editLocationDialog,
-                  ),
-                  ListTile(
-                    title: Text('Administrator / responsabil'),
-                    subtitle: Text(_locationAdmin.isEmpty ? 'Nesetat' : _locationAdmin),
-                    trailing: Icon(Icons.edit),
-                    onTap: _editLocationDialog,
-                  ),
-                ],
-              ),
-            ),
-            Card(
-              color: Colors.orange[50],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.notifications_active, color: Colors.orange[800]),
-                title: Text('Notificări și alerte', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  SwitchListTile(
-                    title: Text('Notificări email'),
-                    value: _notifEmail,
-                    onChanged: (v) async {
-                      await _firestoreSettings.saveNotifPrefs(v, _notifPush, _notifSms);
-                      await _settingsService.saveNotifPrefs(v, _notifPush, _notifSms);
-                      setState(() => _notifEmail = v);
-                    },
-                  ),
-                  SwitchListTile(
-                    title: Text('Notificări push'),
-                    value: _notifPush,
-                    onChanged: (v) async {
-                      await _firestoreSettings.saveNotifPrefs(_notifEmail, v, _notifSms);
-                      await _settingsService.saveNotifPrefs(_notifEmail, v, _notifSms);
-                      setState(() => _notifPush = v);
-                    },
-                  ),
-                  SwitchListTile(
-                    title: Text('Notificări SMS'),
-                    value: _notifSms,
-                    onChanged: (v) async {
-                      await _firestoreSettings.saveNotifPrefs(_notifEmail, _notifPush, v);
-                      await _settingsService.saveNotifPrefs(_notifEmail, _notifPush, v);
-                      setState(() => _notifSms = v);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Card(
-              color: Colors.blue[50],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.description, color: Colors.blue[800]),
-                title: Text('Regulamente și documente', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.rule, color: Colors.blue),
-                    title: Text('Regulamentul intern'),
-                    trailing: Icon(Icons.open_in_new),
-                    onTap: () async {
-                      // Exemplu: deschide un link extern
-                      // await launchUrl(Uri.parse('https://www.google.com'));
-                    },
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.picture_as_pdf, color: Colors.red),
-                    title: Text('Contract rezident'),
-                    trailing: Icon(Icons.download),
-                    onTap: () async {
-                      // await launchUrl(Uri.parse('https://www.google.com'));
-                    },
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.privacy_tip, color: Colors.green),
-                    title: Text('Politica de confidențialitate'),
-                    trailing: Icon(Icons.open_in_new),
-                    onTap: () async {
-                      // await launchUrl(Uri.parse('https://www.google.com'));
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Card(
-              color: Colors.grey[100],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.color_lens, color: Colors.grey[800]),
-                title: Text('Temă și limbă', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.brightness_6),
-                    title: Text('Mod întunecat/luminat'),
-                    trailing: Switch(
-                      value: _darkMode,
-                      onChanged: (v) async {
-                        await _firestoreSettings.saveThemeMode(v);
-                        await _settingsService.saveThemeMode(v);
-                        setState(() => _darkMode = v);
-                      },
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.language),
-                    title: Text('Selectare limbă'),
-                    trailing: DropdownButton<String>(
-                      value: _language,
-                      items: [
-                        DropdownMenuItem(value: 'RO', child: Text('Română')),
-                        DropdownMenuItem(value: 'EN', child: Text('English')),
-                      ],
-                      onChanged: (v) async {
-                        if (v != null) {
-                          await _firestoreSettings.saveLanguage(v);
-                          await _settingsService.saveLanguage(v);
-                          setState(() => _language = v);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // TRIMITERE MESAJELOR ÎN MASĂ
-            Card(
-              color: Colors.purple[50],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.campaign, color: Colors.purple[800]),
-                title: Text('Trimitere mesaje în masă', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
+                  // Card Mesaje în masă
+                  Card(
+                    color: Colors.blue[50],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    margin: EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.message, color: Colors.blue[800]),
+                      title: Text('Mesaje în masă', style: TextStyle(fontWeight: FontWeight.bold)),
                       children: [
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Subiect'),
-                          controller: _massMsgSubjectCtrl,
-                        ),
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Mesaj'),
-                          controller: _massMsgBodyCtrl,
-                          maxLines: 3,
-                        ),
-                        Row(
-                          children: [
-                            Checkbox(value: _massMsgEmail, onChanged: (v) => setState(() => _massMsgEmail = v ?? false)),
-                            Text('Email'),
-                            Checkbox(value: _massMsgPush, onChanged: (v) => setState(() => _massMsgPush = v ?? false)),
-                            Text('Push'),
-                            Checkbox(value: _massMsgSms, onChanged: (v) => setState(() => _massMsgSms = v ?? false)),
-                            Text('SMS'),
-                          ],
-                        ),
-                        ElevatedButton.icon(
-                          icon: Icon(Icons.send),
-                          label: Text('Trimite către toți'),
-                          onPressed: _sendMassMessage,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // CREARE ANUNȚURI
-            Card(
-              color: Colors.green[50],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.announcement, color: Colors.green[800]),
-                title: Text('Creare anunțuri', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      children: [
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Titlu anunț'),
-                          controller: _announcementTitleCtrl,
-                        ),
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Conținut anunț'),
-                          controller: _announcementBodyCtrl,
-                          maxLines: 3,
-                        ),
-                        Row(
-                          children: [
-                            Checkbox(value: _announcementHomepage, onChanged: (v) => setState(() => _announcementHomepage = v ?? false)),
-                            Text('Afișează pe homepage'),
-                          ],
-                        ),
-                        ElevatedButton.icon(
-                          icon: Icon(Icons.add),
-                          label: Text('Creează anunț'),
-                          onPressed: _createAnnouncement,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // PROGRAMARE NOTIFICĂRI AUTOMATE
-            Card(
-              color: Colors.red[50],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              margin: EdgeInsets.only(bottom: 16),
-              child: ExpansionTile(
-                leading: Icon(Icons.schedule, color: Colors.red[800]),
-                title: Text('Programare notificări automate', style: TextStyle(fontWeight: FontWeight.bold)),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      children: [
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Titlu notificare'),
-                          controller: _autoNotifTitleCtrl,
-                        ),
-                        TextField(
-                          decoration: InputDecoration(labelText: 'Conținut notificare'),
-                          controller: _autoNotifBodyCtrl,
-                          maxLines: 2,
-                        ),
-                        Row(
-                          children: [
-                            Text('Data și ora: '),
-                            TextButton(
-                              child: Text(_autoNotifDate == null ? 'Selectează' : _autoNotifDate.toString()),
-                              onPressed: _pickAutoNotifDate,
-                            ),
-                          ],
-                        ),
-                        ElevatedButton.icon(
-                          icon: Icon(Icons.schedule_send),
-                          label: Text('Programează notificare'),
-                          onPressed: _scheduleAutoNotification,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // CĂUTARE UTILIZATOR
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Caută utilizator',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onChanged: (val) {
-                      setState(() {
-                        userSearch = val.toLowerCase();
-                      });
-                    },
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.account_circle, color: Colors.teal),
-                  tooltip: 'Profilul meu',
-                  onPressed: () async {
-                    final user = FirebaseAuth.instance.currentUser;
-                    if (user != null) {
-                      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-                      if (doc.exists) _showProfileDialog(doc.data()!);
-                    }
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Text('Utilizatori', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            // LISTĂ UTILIZATORI
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) return Text('Eroare la încărcare: ${snapshot.error}');
-                if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
-                final docs = snapshot.data!.docs;
-                final familyUsers = docs.where((doc) => (doc.data() as Map<String, dynamic>)['role'] == 'family').toList();
-                final otherUsers = docs.where((doc) => (doc.data() as Map<String, dynamic>)['role'] != 'family').toList();
-                if (docs.isEmpty) return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.group_off, color: Colors.grey, size: 64),
-                      SizedBox(height: 16),
-                      Text('Nu există utilizatori.', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                    ],
-                  ),
-                );
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (familyUsers.isNotEmpty) ...[
-                      Text('Conturi familie/aparținător', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
-                      ...familyUsers.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final blocked = data['blocked'] == true;
-                        return Card(
-                          margin: EdgeInsets.symmetric(vertical: 4),
-                          color: Colors.teal[50],
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          child: ListTile(
-                            leading: Icon(Icons.family_restroom, color: blocked ? Colors.grey : Colors.teal[700]),
-                            title: Text(data['email'] ?? '', style: TextStyle(decoration: blocked ? TextDecoration.lineThrough : null)),
-                            subtitle: Text('Pacient asociat: ${data['patientId'] ?? '-'}${blocked ? ' (blocat)' : ''}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(blocked ? Icons.lock_open : Icons.lock, color: Colors.purple),
-                                  tooltip: blocked ? 'Deblochează cont' : 'Blochează cont',
-                                  onPressed: () => _toggleBlockUser(doc.id, blocked),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete, color: Colors.red),
-                                  tooltip: 'Șterge',
-                                  onPressed: () => _deleteUser(doc.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      SizedBox(height: 18),
-                    ],
-                    if (otherUsers.isNotEmpty) ...[
-                      Text(
-                        'Personal & administratori',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                      ),
-                      ...otherUsers.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final blocked = data['blocked'] == true;
-                        return Card(
-                          margin: EdgeInsets.symmetric(vertical: 4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          child: ListTile(
-                            leading: Icon(Icons.person, color: blocked ? Colors.grey : Colors.teal),
-                            title: Text(
-                              data['email'] ?? '',
-                              style: TextStyle(
-                                decoration: blocked ? TextDecoration.lineThrough : null,
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: [
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Subiect mesaj'),
+                                controller: _massMsgSubjectCtrl,
                               ),
-                            ),
-                            subtitle: Text('Rol: ${data['role'] ?? ''}${blocked ? ' (blocat)' : ''}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(blocked ? Icons.lock_open : Icons.lock, color: Colors.purple),
-                                  tooltip: blocked ? 'Deblochează cont' : 'Blochează cont',
-                                  onPressed: () => _toggleBlockUser(doc.id, blocked),
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Conținut mesaj'),
+                                controller: _massMsgBodyCtrl,
+                                maxLines: 3,
+                              ),
+                              Row(
+                                children: [
+                                  Checkbox(value: _massMsgEmail, onChanged: (v) => setState(() => _massMsgEmail = v ?? true)),
+                                  Text('Email'),
+                                  SizedBox(width: 16),
+                                  Checkbox(value: _massMsgPush, onChanged: (v) => setState(() => _massMsgPush = v ?? false)),
+                                  Text('Notificare push'),
+                                  SizedBox(width: 16),
+                                  Checkbox(value: _massMsgSms, onChanged: (v) => setState(() => _massMsgSms = v ?? false)),
+                                  Text('SMS'),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                icon: Icon(Icons.send),
+                                label: Text('Trimite mesaj'),
+                                onPressed: _sendMassMessage,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Card Informații locație
+                  Card(
+                    color: Colors.teal[100],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    margin: EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.location_city, color: Colors.teal[800]),
+                      title: Text('Informații despre locație', style: TextStyle(fontWeight: FontWeight.bold)),
+                      children: [
+                        ListTile(
+                          title: Text('Numele complexului / clădirii'),
+                          subtitle: Text(_locationName.isEmpty ? 'Nesetat' : _locationName),
+                          trailing: Icon(Icons.edit),
+                          onTap: _editLocationDialog,
+                        ),
+                        ListTile(
+                          title: Text('Adresă completă'),
+                          subtitle: Text(_locationAddress.isEmpty ? 'Nesetat' : _locationAddress),
+                          trailing: Icon(Icons.edit),
+                          onTap: _editLocationDialog,
+                        ),
+                        ListTile(
+                          title: Text('Administrator / responsabil'),
+                          subtitle: Text(_locationAdmin.isEmpty ? 'Nesetat' : _locationAdmin),
+                          trailing: Icon(Icons.edit),
+                          onTap: _editLocationDialog,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Card Creare anunțuri
+                  Card(
+                    color: Colors.green[50],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    margin: EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.announcement, color: Colors.green[800]),
+                      title: Text('Creare anunțuri', style: TextStyle(fontWeight: FontWeight.bold)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: [
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Titlu anunț'),
+                                controller: _announcementTitleCtrl,
+                              ),
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Conținut anunț'),
+                                controller: _announcementBodyCtrl,
+                                maxLines: 3,
+                              ),
+                              Row(
+                                children: [
+                                  Checkbox(value: _announcementHomepage, onChanged: (v) => setState(() => _announcementHomepage = v ?? false)),
+                                  Text('Afișează pe homepage'),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                icon: Icon(Icons.add),
+                                label: Text('Creează anunț'),
+                                onPressed: _createAnnouncement,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Card Programare notificări automate
+                  // Card Preferințe notificări aparținători
+                  Card(
+                    color: Colors.purple[50],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    margin: EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.notifications_active, color: Colors.purple[800]),
+                      title: Text('Preferințe notificări aparținători', style: TextStyle(fontWeight: FontWeight.bold)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Selectează tipurile de notificări pe care dorești să le primești:',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                              SizedBox(height: 16),
+                              CheckboxListTile(
+                                title: Text('Programări medicale'),
+                                subtitle: Text('Consultații, analize, tratamente'),
+                                value: _notifyMedicalAppointments,
+                                onChanged: (value) => setState(() => _notifyMedicalAppointments = value ?? true),
+                              ),
+                              CheckboxListTile(
+                                title: Text('Administrare medicamente'),
+                                subtitle: Text('Medicamente administrate, modificări în schema de tratament'),
+                                value: _notifyMedications,
+                                onChanged: (value) => setState(() => _notifyMedications = value ?? true),
+                              ),
+                              CheckboxListTile(
+                                title: Text('Activități și evenimente'),
+                                subtitle: Text('Participare la activități sociale, terapii, etc.'),
+                                value: _notifyActivities,
+                                onChanged: (value) => setState(() => _notifyActivities = value ?? true),
+                              ),
+                              Divider(),
+                              Text('Frecvența actualizărilor generale:',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                              SizedBox(height: 8),
+                              CheckboxListTile(
+                                title: Text('Actualizări zilnice'),
+                                subtitle: Text('Primești un rezumat la sfârșitul fiecărei zile'),
+                                value: _notifyDailyUpdates,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _notifyDailyUpdates = value ?? true;
+                                    if (value == true) {
+                                      _notifyWeeklyUpdates = false;
+                                    }
+                                  });
+                                },
+                              ),
+                              CheckboxListTile(
+                                title: Text('Actualizări săptămânale'),
+                                subtitle: Text('Primești un rezumat la sfârșitul fiecărei săptămâni'),
+                                value: _notifyWeeklyUpdates,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _notifyWeeklyUpdates = value ?? false;
+                                    if (value == true) {
+                                      _notifyDailyUpdates = false;
+                                    }
+                                  });
+                                },
+                              ),
+                              SizedBox(height: 16),
+                              Center(
+                                child: ElevatedButton.icon(
+                                  icon: Icon(Icons.save),
+                                  label: Text('Salvează preferințele'),
+                                  onPressed: _saveNotificationPreferences,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.purple[700],
+                                    foregroundColor: Colors.white,
+                                  ),
                                 ),
-                                IconButton(
-                                  icon: Icon(Icons.edit, color: Colors.orange),
-                                  tooltip: 'Editează',
-                                  onPressed: () => _showEditUserDialog(doc.id, data),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.lock_reset, color: Colors.blue),
-                                  tooltip: 'Resetează parolă (email)',
-                                  onPressed: () => _resetPassword(data['email'] ?? ''),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.password, color: Colors.indigo),
-                                  tooltip: 'Setează parolă nouă (admin)',
-                                  onPressed: () => _showSetPasswordDialog(doc.id, data['email'] ?? ''),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete, color: Colors.red),
-                                  tooltip: 'Șterge',
-                                  onPressed: () => _deleteUser(doc.id),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Card(
+                    color: Colors.red[50],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    margin: EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      leading: Icon(Icons.schedule, color: Colors.red[800]),
+                      title: Text('Programare notificări automate', style: TextStyle(fontWeight: FontWeight.bold)),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: [
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Titlu notificare'),
+                                controller: _autoNotifTitleCtrl,
+                              ),
+                              TextField(
+                                decoration: InputDecoration(labelText: 'Conținut notificare'),
+                                controller: _autoNotifBodyCtrl,
+                                maxLines: 2,
+                              ),
+                              Row(
+                                children: [
+                                  Text('Data și ora: '),
+                                  TextButton(
+                                    child: Text(_autoNotifDate == null ? 'Selectează' : _autoNotifDate.toString()),
+                                    onPressed: _pickAutoNotifDate,
+                                  ),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                icon: Icon(Icons.schedule_send),
+                                label: Text('Programează notificare'),
+                                onPressed: _scheduleAutoNotification,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Tab 2: Utilizatori
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: 'Caută utilizator',
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onChanged: (val) {
+                            setState(() {
+                              userSearch = val.toLowerCase();
+                            });
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.account_circle, color: Colors.teal),
+                        tooltip: 'Profilul meu',
+                        onPressed: () async {
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user != null) {
+                            final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                            if (doc.exists) _showProfileDialog(doc.data()!);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text('Utilizatori', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) return Text('Eroare la încărcare: ${snapshot.error}');
+                        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+                        final docs = snapshot.data!.docs;
+                        final familyUsers = docs.where((doc) => (doc.data() as Map<String, dynamic>)['role'] == 'family').toList();
+                        final otherUsers = docs.where((doc) => (doc.data() as Map<String, dynamic>)['role'] != 'family').toList();
+                        if (docs.isEmpty) return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.group_off, color: Colors.grey, size: 64),
+                              SizedBox(height: 16),
+                              Text('Nu există utilizatori.', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                            ],
                           ),
                         );
-                      }).toList(),
-                    ],
-                  ],
-                );
-              },
+                        return ListView(
+                          children: [
+                            if (familyUsers.isNotEmpty) ...[
+                              Text('Conturi familie/aparținător', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                              ...familyUsers.map((doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                final blocked = data['blocked'] == true;
+                                return Card(
+                                  margin: EdgeInsets.symmetric(vertical: 4),
+                                  color: Colors.teal[50],
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  child: ListTile(
+                                    leading: Icon(Icons.family_restroom, color: blocked ? Colors.grey : Colors.teal[700]),
+                                    title: Text(data['email'] ?? '', style: TextStyle(decoration: blocked ? TextDecoration.lineThrough : null)),
+                                    subtitle: Text('Pacient asociat: ${data['patientId'] ?? '-'}${blocked ? ' (blocat)' : ''}'),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(blocked ? Icons.lock_open : Icons.lock, color: Colors.purple),
+                                          tooltip: blocked ? 'Deblochează cont' : 'Blochează cont',
+                                          onPressed: () => _toggleBlockUser(doc.id, blocked),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.delete, color: Colors.red),
+                                          tooltip: 'Șterge',
+                                          onPressed: () => _deleteUser(doc.id),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              SizedBox(height: 18),
+                            ],
+                            if (otherUsers.isNotEmpty) ...[
+                              Text(
+                                'Personal & administratori',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                              ),
+                              ...otherUsers.map((doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                final blocked = data['blocked'] == true;
+                                return Card(
+                                  margin: EdgeInsets.symmetric(vertical: 4),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  child: ListTile(
+                                    leading: Icon(Icons.person, color: blocked ? Colors.grey : Colors.teal),
+                                    title: Text(
+                                      data['email'] ?? '',
+                                      style: TextStyle(
+                                        decoration: blocked ? TextDecoration.lineThrough : null,
+                                      ),
+                                    ),
+                                    subtitle: Text('Rol: ${data['role'] ?? ''}${blocked ? ' (blocat)' : ''}'),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(blocked ? Icons.lock_open : Icons.lock, color: Colors.purple),
+                                          tooltip: blocked ? 'Deblochează cont' : 'Blochează cont',
+                                          onPressed: () => _toggleBlockUser(doc.id, blocked),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.edit, color: Colors.orange),
+                                          tooltip: 'Editează',
+                                          onPressed: () => _showEditUserDialog(doc.id, data),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.lock_reset, color: Colors.blue),
+                                          tooltip: 'Resetează parolă (email)',
+                                          onPressed: () => _resetPassword(data['email'] ?? ''),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.password, color: Colors.indigo),
+                                          tooltip: 'Setează parolă nouă (admin)',
+                                          onPressed: () => _showSetPasswordDialog(doc.id, data['email'] ?? ''),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.delete, color: Colors.red),
+                                          tooltip: 'Șterge',
+                                          onPressed: () => _deleteUser(doc.id),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
