@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'resident_medications_screen.dart';
-import 'appointments_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
 import 'app_drawer.dart';
-import 'package:flutter/services.dart';
 
 class ResidentProfileScreen extends StatefulWidget {
   final String residentId;
@@ -15,11 +15,6 @@ class ResidentProfileScreen extends StatefulWidget {
 }
 
 class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
-  bool isLoading = true;
-  DocumentSnapshot? residentSnapshot;
-  List<bool> expandedPanels = List.generate(6, (i) => false);
-  Map<String, dynamic> get data => residentSnapshot?.data() as Map<String, dynamic>? ?? {};
-  String? get profilePhotoUrl => data['profilePhotoUrl'];
 
   Future<void> dischargeResident() async {
     final now = DateTime.now();
@@ -38,14 +33,8 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    fetchResident();
-    if (isLoading) return Scaffold(body: Center(child: CircularProgressIndicator()));
-    final data = residentSnapshot?.data() as Map<String, dynamic>? ?? {};
-    List<bool> expandedPanels = List.generate(6, (i) => false);
-    String? profilePhotoUrl = data['profilePhotoUrl'];
-
     return Scaffold(
-      drawer: (widget.readOnly ?? false) && (widget.residentId != null)
+      drawer: (widget.readOnly ?? false)
           ? AppDrawer(currentRoute: 'profile', isFamily: true, patientId: widget.residentId)
           : AppDrawer(currentRoute: 'profile'),
       appBar: AppBar(
@@ -58,193 +47,229 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
         ),
         backgroundColor: Colors.teal,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: ExpansionPanelList(
-            expansionCallback: (int index, bool isExpanded) {
-              setState(() {
-                expandedPanels[index] = !isExpanded;
-              });
-            },
-            children: [
-              // 1. Date personale extinse
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.info, color: Colors.teal),
-                  title: Text('Date personale'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.edit, color: Colors.teal),
-                        onPressed: () {
-                          showEditDialog(data);
-                        },
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('residents')
+            .doc(widget.residentId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Eroare la încărcarea datelor: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          final data = snapshot.data!.data() ?? <String, dynamic>{};
+          final profilePhotoUrl = data['profilePhotoUrl'] as String?;
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header cu poza și info principale
+                  Card(
+                    elevation: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 36,
+                            backgroundImage: (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty)
+                                ? NetworkImage(profilePhotoUrl)
+                                : null,
+                            child: (profilePhotoUrl == null || profilePhotoUrl.isEmpty)
+                                ? Icon(Icons.person, size: 36)
+                                : null,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(data['name'] ?? '', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 4),
+                                Text('Data nașterii: ${data['birthdate'] ?? ''}', style: Theme.of(context).textTheme.bodyMedium),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: showProfilePhotoDialog,
+                                icon: const Icon(Icons.camera_alt),
+                                label: const Text('Schimbă poză'),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: () => showEditDialog(data),
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Editează'),
+                              ),
+                            ],
+                          )
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(Icons.camera_alt, color: Colors.teal),
-                        onPressed: () {
-                          showProfilePhotoDialog();
-                        },
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Nume complet'), subtitle: Text(data['name'] ?? '')),
-                      ListTile(title: Text('Data nașterii'), subtitle: Text(data['birthdate'] ?? '')),
-                      profilePhotoUrl != null && profilePhotoUrl.isNotEmpty
-                          ? ListTile(
-                              title: Text('Poză de profil'),
-                              subtitle: Image.network(profilePhotoUrl, height: 80),
-                            )
-                          : ListTile(title: Text('Poză de profil'), subtitle: Text('Nu există poză încărcată')),
-                      ListTile(title: Text('CNP (criptat)'), subtitle: Text(data['cnp'] ?? '')),
-                      ListTile(title: Text('Cod intern/familie'), subtitle: Text(data['internalCode'] ?? '')),
-                      ListTile(title: Text('Status juridic'), subtitle: Text(data['legalStatus'] ?? '')),
-                    ],
+
+                  const SizedBox(height: 12),
+
+                  // 1. Date personale
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.info, color: Colors.teal),
+                          title: Text('Date personale', style: Theme.of(context).textTheme.titleMedium),
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit, color: Colors.teal),
+                            onPressed: () => showEditDialog(data),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('CNP (criptat)'), subtitle: Text(data['cnp'] ?? '')),
+                        ListTile(title: Text('Cod intern/familie'), subtitle: Text(data['internalCode'] ?? '')),
+                        ListTile(title: Text('Status juridic'), subtitle: Text(data['legalStatus'] ?? '')),
+                      ],
+                    ),
                   ),
-                ),
-                isExpanded: expandedPanels[0],
+
+                  const SizedBox(height: 12),
+
+                  // 2. Contacte importante
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.contact_phone, color: Colors.blue),
+                          title: Text('Contacte importante', style: Theme.of(context).textTheme.titleMedium),
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => showEditContactsDialog(data),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('Persoană de contact principală'), subtitle: Text(data['mainContactName'] ?? '')),
+                        ListTile(title: Text('Relație'), subtitle: Text(data['mainContactRelation'] ?? '')),
+                        ListTile(title: Text('Telefon'), subtitle: Text(data['mainContactPhone'] ?? '')),
+                        ListTile(title: Text('Email'), subtitle: Text(data['mainContactEmail'] ?? '')),
+                        ListTile(title: Text('Persoană de rezervă'), subtitle: Text(data['backupContactName'] ?? '')),
+                        ListTile(title: Text('Medicul de familie'), subtitle: Text(data['familyDoctor'] ?? '')),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 3. Informații medicale
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.medical_services, color: Colors.red),
+                          title: Text('Informații medicale', style: Theme.of(context).textTheme.titleMedium),
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit, color: Colors.red),
+                            onPressed: () => showEditMedicalDialog(data),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('Grupa sanguină'), subtitle: Text(data['bloodType'] ?? '')),
+                        ListTile(title: Text('Alergii'), subtitle: Text(data['allergies'] ?? '')),
+                        ListTile(title: Text('Diagnostic(e) principale'), subtitle: Text(data['diagnosis'] ?? '')),
+                        ListTile(title: Text('Tratament curent'), subtitle: Text(data['medication'] ?? '')),
+                        ListTile(title: Text('Orar tratament'), subtitle: Text(data['medicationSchedule'] ?? '')),
+                        ListTile(title: Text('Istoric medical'), subtitle: Text(data['medicalHistory'] ?? '')),
+                        ListTile(title: Text('Mobilitate'), subtitle: Text(data['mobility'] ?? '')),
+                        ListTile(title: Text('Dietă specială'), subtitle: Text(data['diet'] ?? '')),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 4. Stare emoțională / cognitivă
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.psychology, color: Colors.purple),
+                          title: Text('Stare emoțională / cognitivă', style: Theme.of(context).textTheme.titleMedium),
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit, color: Colors.purple),
+                            onPressed: () => showEditEmotionalDialog(data),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('Nivel de orientare'), subtitle: Text(data['orientation'] ?? '')),
+                        ListTile(title: Text('Tulburări cognitive'), subtitle: Text(data['cognitiveIssues'] ?? '')),
+                        ListTile(title: Text('Observații psihologice'), subtitle: Text(data['psychologicalNotes'] ?? '')),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 5. Activități și preferințe
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.sports_handball, color: Colors.green),
+                          title: Text('Activități și preferințe', style: Theme.of(context).textTheme.titleMedium),
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit, color: Colors.green),
+                            onPressed: () => showEditPreferencesDialog(data),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('Hobby-uri'), subtitle: Text(data['hobbies'] ?? '')),
+                        ListTile(title: Text('Activități preferate'), subtitle: Text(data['favoriteActivities'] ?? '')),
+                        ListTile(title: Text('Participare la evenimente'), subtitle: Text(data['eventParticipation'] ?? '')),
+                        ListTile(title: Text('Preferințe alimentare'), subtitle: Text(data['foodPreferences'] ?? '')),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 6. Fișiere și documente
+                  Card(
+                    elevation: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.folder, color: Colors.orange),
+                          title: Text('Fișiere și documente', style: Theme.of(context).textTheme.titleMedium),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(title: Text('Contract de internare'), subtitle: Text(data['contractFile'] ?? '')),
+                        ListTile(title: Text('Buletin / CI scanat'), subtitle: Text(data['idFile'] ?? '')),
+                        ListTile(title: Text('Rețete medicale'), subtitle: Text(data['prescriptionsFile'] ?? '')),
+                        ListTile(title: Text('Plan de îngrijire personalizat'), subtitle: Text(data['carePlanFile'] ?? '')),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              // 2. Contacte importante
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.contact_phone, color: Colors.blue),
-                  title: Text('Contacte importante'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () {
-                      showEditContactsDialog(data);
-                    },
-                  ),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Persoană de contact principală'), subtitle: Text(data['mainContactName'] ?? '')),
-                      ListTile(title: Text('Relație'), subtitle: Text(data['mainContactRelation'] ?? '')),
-                      ListTile(title: Text('Telefon'), subtitle: Text(data['mainContactPhone'] ?? '')),
-                      ListTile(title: Text('Email'), subtitle: Text(data['mainContactEmail'] ?? '')),
-                      ListTile(title: Text('Persoană de rezervă'), subtitle: Text(data['backupContactName'] ?? '')),
-                      ListTile(title: Text('Medicul de familie'), subtitle: Text(data['familyDoctor'] ?? '')),
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[1],
-              ),
-              // 3. Informații medicale detaliate
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.medical_services, color: Colors.red),
-                  title: Text('Informații medicale'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.edit, color: Colors.red),
-                    onPressed: () {
-                      showEditMedicalDialog(data);
-                    },
-                  ),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Grupa sanguină'), subtitle: Text(data['bloodType'] ?? '')),
-                      ListTile(title: Text('Alergii'), subtitle: Text(data['allergies'] ?? '')),
-                      ListTile(title: Text('Diagnostic(e) principale'), subtitle: Text(data['diagnosis'] ?? '')),
-                      ListTile(title: Text('Tratament curent'), subtitle: Text(data['medication'] ?? '')),
-                      ListTile(title: Text('Orar tratament'), subtitle: Text(data['medicationSchedule'] ?? '')),
-                      ListTile(title: Text('Istoric medical'), subtitle: Text(data['medicalHistory'] ?? '')),
-                      ListTile(title: Text('Mobilitate'), subtitle: Text(data['mobility'] ?? '')),
-                      ListTile(title: Text('Dietă specială'), subtitle: Text(data['diet'] ?? '')),
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[2],
-              ),
-              // 4. Stare emoțională / cognitivă
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.psychology, color: Colors.purple),
-                  title: Text('Stare emoțională / cognitivă'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.edit, color: Colors.purple),
-                    onPressed: () {
-                      showEditEmotionalDialog(data);
-                    },
-                  ),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Nivel de orientare'), subtitle: Text(data['orientation'] ?? '')),
-                      ListTile(title: Text('Tulburări cognitive'), subtitle: Text(data['cognitiveIssues'] ?? '')),
-                      ListTile(title: Text('Observații psihologice'), subtitle: Text(data['psychologicalNotes'] ?? '')),
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[3],
-              ),
-              // 5. Activități și preferințe
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.sports_handball, color: Colors.green),
-                  title: Text('Activități și preferințe'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.edit, color: Colors.green),
-                    onPressed: () {
-                      showEditPreferencesDialog(data);
-                    },
-                  ),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Hobby-uri'), subtitle: Text(data['hobbies'] ?? '')),
-                      ListTile(title: Text('Activități preferate'), subtitle: Text(data['favoriteActivities'] ?? '')),
-                      ListTile(title: Text('Participare la evenimente'), subtitle: Text(data['eventParticipation'] ?? '')),
-                      ListTile(title: Text('Preferințe alimentare'), subtitle: Text(data['foodPreferences'] ?? '')),
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[4],
-              ),
-              // 6. Fișiere și documente
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.folder, color: Colors.orange),
-                  title: Text('Fișiere și documente'),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Contract de internare'), subtitle: Text(data['contractFile'] ?? '')),
-                      ListTile(title: Text('Buletin / CI scanat'), subtitle: Text(data['idFile'] ?? '')),
-                      ListTile(title: Text('Rețete medicale'), subtitle: Text(data['prescriptionsFile'] ?? '')),
-                      ListTile(title: Text('Plan de îngrijire personalizat'), subtitle: Text(data['carePlanFile'] ?? '')),
-                      // TODO: Adaugă funcționalitate upload/download
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[5],
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -259,14 +284,19 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
           children: [
             ElevatedButton.icon(
               icon: Icon(Icons.photo_library),
-              label: Text("Selectează poză"),
+              label: Text("Din galerie"),
               onPressed: () async {
-                // TODO: Implementare upload folosind image_picker și Firebase Storage
-                // După upload, salvează URL în Firestore la profilePhotoUrl
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Funcționalitate upload în lucru")),
-                );
+                await _pickAndUploadProfilePhoto(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              icon: Icon(Icons.camera_alt),
+              label: Text("Fă o poză"),
+              onPressed: () async {
+                Navigator.pop(context);
+                await _pickAndUploadProfilePhoto(ImageSource.camera);
               },
             ),
           ],
@@ -276,6 +306,59 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _pickAndUploadProfilePhoto(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(source: source, imageQuality: 85, maxWidth: 1600);
+      if (picked == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Selectarea imaginii a fost anulată')),
+        );
+        return;
+      }
+
+      // Afișează dialog de progres
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Încarcă în Firebase Storage folosind bytes (compatibil web/desktop/mobile)
+      Uint8List bytes = await picked.readAsBytes();
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('residents')
+          .child(widget.residentId)
+          .child('profile.jpg');
+
+      final metadata = SettableMetadata(contentType: 'image/jpeg');
+      await storageRef.putData(bytes, metadata);
+      final downloadUrl = await storageRef.getDownloadURL();
+
+      // Salvează URL-ul în Firestore
+      await FirebaseFirestore.instance
+          .collection('residents')
+          .doc(widget.residentId)
+          .update({'profilePhotoUrl': downloadUrl});
+
+      Navigator.of(context, rootNavigator: true).pop(); // închide progress
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Poză de profil actualizată')),
+      );
+    } on FirebaseException catch (e) {
+      Navigator.of(context, rootNavigator: true).maybePop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Eroare Firebase: ${e.message ?? e.code}')),
+      );
+    } catch (e) {
+      Navigator.of(context, rootNavigator: true).maybePop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Eroare la încărcarea pozei: $e')),
+      );
+    }
   }
 
   void showEditContactsDialog(Map<String, dynamic> data) {
@@ -318,7 +401,6 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
                 'familyDoctor': familyDoctorController.text.trim(),
               });
               Navigator.pop(context);
-              fetchResident();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Contacte actualizate")),
               );
@@ -376,7 +458,6 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
                 'diet': dietController.text.trim(),
               });
               Navigator.pop(context);
-              fetchResident();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Date medicale actualizate")),
               );
@@ -419,7 +500,6 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
                 'psychologicalNotes': psychologicalNotesController.text.trim(),
               });
               Navigator.pop(context);
-              fetchResident();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Date emoționale/cognitive actualizate")),
               );
@@ -465,7 +545,6 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
                 'foodPreferences': foodPreferencesController.text.trim(),
               });
               Navigator.pop(context);
-              fetchResident();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Preferințe actualizate")),
               );
@@ -477,25 +556,7 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
     );
   }
 
-  Future<void> fetchResident() async {
-    return await FirebaseFirestore.instance
-        .collection('residents')
-        .doc(widget.residentId)
-        .get()
-        .then((snapshot) {
-      setState(() {
-        residentSnapshot = snapshot;
-        isLoading = false;
-      });
-    }).catchError((error) {
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Eroare la încărcarea datelor rezidentului: $error")),
-      );
-    });
-  }
+  // Datele sunt ascultate în timp real prin StreamBuilder; nu mai e nevoie de fetch manual.
 
   void showEditDialog(Map<String, dynamic> data) {
     final nameController = TextEditingController(text: data['name'] ?? '');
@@ -534,7 +595,6 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
                 'legalStatus': legalStatusController.text.trim(),
               });
               Navigator.pop(context);
-              fetchResident();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("Date personale actualizate")),
               );
