@@ -15,92 +15,11 @@ class ResidentProfileScreen extends StatefulWidget {
 }
 
 class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
-
   bool isLoading = true;
   DocumentSnapshot? residentSnapshot;
   List<bool> expandedPanels = List.generate(6, (i) => false);
-
   Map<String, dynamic> get data => residentSnapshot?.data() as Map<String, dynamic>? ?? {};
   String? get profilePhotoUrl => data['profilePhotoUrl'];
-
-  @override
-            children: <ExpansionPanel>[
-              ExpansionPanel(
-                headerBuilder: (BuildContext context, bool isExpanded) {
-                  return ListTile(
-                    leading: Icon(Icons.info, color: Colors.teal),
-                    title: Text('Date personale'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.edit, color: Colors.teal),
-                          onPressed: () {
-                            showEditDialog(data);
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.camera_alt, color: Colors.teal),
-                          onPressed: () {
-                            showProfilePhotoDialog();
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Nume complet'), subtitle: Text(data['name'] ?? '')),
-                      ListTile(title: Text('Data nașterii'), subtitle: Text(data['birthdate'] ?? '')),
-                      profilePhotoUrl != null && profilePhotoUrl.isNotEmpty
-                          ? ListTile(
-                              title: Text('Poză de profil'),
-                              subtitle: Image.network(profilePhotoUrl, height: 80),
-                            )
-                          : ListTile(title: Text('Poză de profil'), subtitle: Text('Nu există poză încărcată')),
-                      ListTile(title: Text('CNP (criptat)'), subtitle: Text(data['cnp'] ?? '')),
-                      ListTile(title: Text('Cod intern/familie'), subtitle: Text(data['internalCode'] ?? '')),
-                      ListTile(title: Text('Status juridic'), subtitle: Text(data['legalStatus'] ?? '')),
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[0],
-              ),
-              // ...restul ExpansionPanel-urilor, cu headerBuilder corect...
-            ],
-              await FirebaseFirestore.instance
-                  .collection('residents')
-                  .doc(widget.residentId)
-                  .update({
-                'name': nameController.text.trim(),
-                'age': ageController.text.trim(),
-                'birthdate': birthdateController.text.trim(),
-                'room': roomController.text.trim(),
-                'bloodType': bloodTypeController.text.trim(),
-                'allergies': allergiesController.text.trim(),
-                'medication': medicationController.text.trim(),
-                'contact': contactController.text.trim(),
-                'familyMember': familyController.text.trim(),
-                'notes': notesController.text.trim(),
-              });
-              Navigator.pop(context);
-              fetchResident();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("Profil actualizat")),
-              );
-            },
-            child: Text("Salvează"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ...existing dialog methods (showProfilePhotoDialog, showEditContactsDialog, etc.) should be moved here...
 
   Future<void> dischargeResident() async {
     final now = DateTime.now();
@@ -115,12 +34,11 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Rezidentul a fost externat.")),
     );
-
-    fetchResident();
   }
 
   @override
   Widget build(BuildContext context) {
+    fetchResident();
     if (isLoading) return Scaffold(body: Center(child: CircularProgressIndicator()));
     final data = residentSnapshot?.data() as Map<String, dynamic>? ?? {};
     List<bool> expandedPanels = List.generate(6, (i) => false);
@@ -558,30 +476,73 @@ class _ResidentProfileScreenState extends State<ResidentProfileScreen> {
       ),
     );
   }
-              // 6. Fișiere și documente
-              ExpansionPanel(
-                headerBuilder: (context, isExpanded) => ListTile(
-                  leading: Icon(Icons.folder, color: Colors.orange),
-                  title: Text('Fișiere și documente'),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(title: Text('Contract de internare'), subtitle: Text(data['contractFile'] ?? '')),
-                      ListTile(title: Text('Buletin / CI scanat'), subtitle: Text(data['idFile'] ?? '')),
-                      ListTile(title: Text('Rețete medicale'), subtitle: Text(data['prescriptionsFile'] ?? '')),
-                      ListTile(title: Text('Plan de îngrijire personalizat'), subtitle: Text(data['carePlanFile'] ?? '')),
-                      // TODO: Adaugă funcționalitate upload/download
-                    ],
-                  ),
-                ),
-                isExpanded: expandedPanels[5],
-              ),
+
+  Future<void> fetchResident() async {
+    return await FirebaseFirestore.instance
+        .collection('residents')
+        .doc(widget.residentId)
+        .get()
+        .then((snapshot) {
+      setState(() {
+        residentSnapshot = snapshot;
+        isLoading = false;
+      });
+    }).catchError((error) {
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Eroare la încărcarea datelor rezidentului: $error")),
+      );
+    });
+  }
+
+  void showEditDialog(Map<String, dynamic> data) {
+    final nameController = TextEditingController(text: data['name'] ?? '');
+    final birthdateController = TextEditingController(text: data['birthdate'] ?? '');
+    final cnpController = TextEditingController(text: data['cnp'] ?? '');
+    final internalCodeController = TextEditingController(text: data['internalCode'] ?? '');
+    final legalStatusController = TextEditingController(text: data['legalStatus'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text("Editează date personale"),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(controller: nameController, decoration: InputDecoration(labelText: "Nume complet")),
+              TextField(controller: birthdateController, decoration: InputDecoration(labelText: "Data nașterii")),
+              TextField(controller: cnpController, decoration: InputDecoration(labelText: "CNP (criptat)")),
+              TextField(controller: internalCodeController, decoration: InputDecoration(labelText: "Cod intern/familie")),
+              TextField(controller: legalStatusController, decoration: InputDecoration(labelText: "Status juridic")),
             ],
           ),
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text("Anulează")),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('residents')
+                  .doc(widget.residentId)
+                  .update({
+                'name': nameController.text.trim(),
+                'birthdate': birthdateController.text.trim(),
+                'cnp': cnpController.text.trim(),
+                'internalCode': internalCodeController.text.trim(),
+                'legalStatus': legalStatusController.text.trim(),
+              });
+              Navigator.pop(context);
+              fetchResident();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Date personale actualizate")),
+              );
+            },
+            child: Text("Salvează"),
+          ),
+        ],
       ),
     );
   }
+}
