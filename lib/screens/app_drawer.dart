@@ -15,7 +15,9 @@ class AppDrawer extends StatelessWidget {
   final String? currentRoute;
   final bool isFamily;
   final String? patientId;
-  const AppDrawer({Key? key, this.currentRoute, this.isFamily = false, this.patientId}) : super(key: key);
+  const AppDrawer(
+      {Key? key, this.currentRoute, this.isFamily = false, this.patientId})
+      : super(key: key);
 
   void logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -39,7 +41,11 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   Icon(Icons.account_circle, color: Colors.white, size: 48),
                   SizedBox(height: 8),
-                  Text('Cont familie', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('Cont familie',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -64,7 +70,11 @@ class AppDrawer extends StatelessWidget {
               title: Text('Calendar activități'),
               selected: currentRoute == 'calendar',
               onTap: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => CalendarScreen(residentId: patientId!)));
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            CalendarScreen(residentId: patientId!)));
               },
             ),
             ListTile(
@@ -72,7 +82,11 @@ class AppDrawer extends StatelessWidget {
               title: Text('Programări la medic'),
               selected: currentRoute == 'appointments',
               onTap: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => AppointmentsScreen(residentId: patientId!)));
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            AppointmentsScreen(residentId: patientId!)));
               },
             ),
             ListTile(
@@ -80,7 +94,11 @@ class AppDrawer extends StatelessWidget {
               title: Text('Administrare tratamente'),
               selected: currentRoute == 'treatments',
               onTap: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => TreatmentsAdminScreen(residentId: patientId!)));
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            TreatmentsAdminScreen(residentId: patientId!)));
               },
             ),
             ListTile(
@@ -88,7 +106,11 @@ class AppDrawer extends StatelessWidget {
               title: Text('Comunicare familie'),
               selected: currentRoute == 'family',
               onTap: () {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => FamilyCommunicationScreen(residentId: patientId!)));
+                Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            FamilyCommunicationScreen(residentId: patientId!)));
               },
             ),
             Divider(),
@@ -97,7 +119,8 @@ class AppDrawer extends StatelessWidget {
               title: Text('Deconectare', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+                Navigator.pushReplacement(
+                    context, MaterialPageRoute(builder: (_) => LoginScreen()));
               },
             ),
           ],
@@ -114,9 +137,34 @@ class AppDrawer extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.account_circle, color: Colors.white, size: 48),
+                CircleAvatar(
+                  radius: 24,
+                  backgroundImage:
+                      FirebaseAuth.instance.currentUser?.photoURL != null
+                          ? NetworkImage(
+                              FirebaseAuth.instance.currentUser!.photoURL!)
+                          : null,
+                  child: FirebaseAuth.instance.currentUser?.photoURL == null
+                      ? Icon(Icons.account_circle,
+                          color: Colors.white, size: 48)
+                      : null,
+                ),
                 SizedBox(height: 8),
-                Text('Meniu', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                Text('Meniu',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold)),
+                Text(
+                  'Utilizator: ' +
+                      (FirebaseAuth.instance.currentUser?.displayName ?? 'N/A'),
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                Text(
+                  'Email: ' +
+                      (FirebaseAuth.instance.currentUser?.email ?? 'N/A'),
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
               ],
             ),
           ),
@@ -125,7 +173,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Dashboard'),
             selected: currentRoute == 'dashboard',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => DashboardScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => DashboardScreen()));
             },
           ),
           ListTile(
@@ -133,7 +182,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Rezidenți'),
             selected: currentRoute == 'residents',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ResidentsScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => ResidentsScreen()));
             },
           ),
           ListTile(
@@ -141,7 +191,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Calendar activități'),
             selected: currentRoute == 'calendar',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => CalendarScreen()));
+              Navigator.pushReplacement(
+                  context, MaterialPageRoute(builder: (_) => CalendarScreen()));
             },
           ),
           ListTile(
@@ -149,7 +200,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Programări la medic'),
             selected: currentRoute == 'appointments',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => AppointmentsScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => AppointmentsScreen()));
             },
           ),
           ListTile(
@@ -157,7 +209,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Administrare tratamente'),
             selected: currentRoute == 'treatments',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => TreatmentsAdminScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => TreatmentsAdminScreen()));
             },
           ),
           ListTile(
@@ -165,7 +218,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Notificări tratamente'),
             selected: currentRoute == 'notifications',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => NotificationsScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => NotificationsScreen()));
             },
           ),
           ListTile(
@@ -173,7 +227,10 @@ class AppDrawer extends StatelessWidget {
             title: Text('Comunicare familie'),
             selected: currentRoute == 'family',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => FamilyCommunicationScreen()));
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => FamilyCommunicationScreen()));
             },
           ),
           ListTile(
@@ -181,7 +238,8 @@ class AppDrawer extends StatelessWidget {
             title: Text('Setări & utilizatori'),
             selected: currentRoute == 'settings',
             onTap: () {
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => UserSettingsScreen()));
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => UserSettingsScreen()));
             },
           ),
           Divider(),
